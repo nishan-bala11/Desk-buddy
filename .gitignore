@@ -1,0 +1,8 @@
+# private: OTA signing key and ESPN cookies
+DeskBuddy/ota_key.h
+pc/ota_key.txt
+pc/fantasy.json
+# build output
+DeskBuddy/build/
+__pycache__/
+graphify-out/
