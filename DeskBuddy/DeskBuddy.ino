@@ -460,10 +460,9 @@ class ServerCB : public BLEServerCallbacks {
 // Text commands go through a queue so all drawing happens in loop().
 class CmdCB : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *c) override {
-    String v = c->getValue();
     Msg m;
-    m.len = min((size_t)v.length(), sizeof(m.data) - 1);
-    memcpy(m.data, v.c_str(), m.len);
+    m.len = min(c->getLength(), sizeof(m.data) - 1);
+    memcpy(m.data, c->getData(), m.len);
     m.data[m.len] = 0;
     // While the iPhone sends its notifications here itself, the PC's copies from Phone Link would
     // show them twice (and Phone Link only passes on some apps anyway)
@@ -474,9 +473,8 @@ class CmdCB : public BLECharacteristicCallbacks {
 
 class ImgCB : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *c) override {
-    String v = c->getValue();
-    const uint8_t *d = (const uint8_t *)v.c_str();
-    size_t n = v.length();
+    const uint8_t *d = c->getData();   // the written value in place: no String copy per write
+    size_t n = c->getLength();
     if (!n || !jpgBuf) return;
     if ((d[0] == 'B' || d[0] == 'M') && n >= 5) {   // B = album cover, M = the SolidWorks model
       uint32_t t0 = millis();
@@ -506,9 +504,8 @@ RTC_NOINIT_ATTR uint32_t otaTries;   // after an update: boots so far, kept thro
 
 class OtaCB : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *c) override {
-    String v = c->getValue();
-    const uint8_t *d = (const uint8_t *)v.c_str();
-    size_t n = v.length();
+    const uint8_t *d = c->getData();   // the written value in place: no String copy per write
+    size_t n = c->getLength();
     if (!n) return;
     if (d[0] == 'B' && n == 37) {
       uint32_t size;
@@ -534,9 +531,8 @@ class OtaCB : public BLECharacteristicCallbacks {
 
 class TrackCB : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *c) override {
-    String v = c->getValue();
-    const uint8_t *d = (const uint8_t *)v.c_str();
-    size_t n = v.length();
+    const uint8_t *d = c->getData();   // the written value in place: no String copy per write
+    size_t n = c->getLength();
     if (!n || !trackPts) return;
     if (d[0] == 'B' && n >= 13) {
       trackReady = false;

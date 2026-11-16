@@ -1127,13 +1127,15 @@ def ble_connected() -> bool:
     return client is not None and client.is_connected
 
 
-async def write_cmd(data: bytes) -> bool:
+async def write_cmd(data: bytes, confirm: bool = False) -> bool:
+    """confirm: wait for the board's acknowledgement (a write without one can be lost on a shaky link)."""
     if ble_connected():
         try:
-            await client.write_gatt_char(CMD_UUID, data, response=False)
+            await client.write_gatt_char(CMD_UUID, data, response=confirm)
             return True
-        except Exception:
-            pass
+        except Exception as e:
+            if confirm:
+                log_line("helper", f"write {data[:1]!r} failed: {e!r}"[:160])
     return False
 
 
@@ -1483,7 +1485,7 @@ async def set_ask(title: str = "", text: str = "", options: tuple = ()) -> None:
                   if title else "")).encode()
     if msg != ask_msg:
         ask_msg = msg   # kept even if the board is away: the reconnect sends it again
-        await write_cmd(msg)
+        await write_cmd(msg, confirm=True)
 
 
 async def on_hook(letter: bytes, info: dict) -> None:
@@ -2000,6 +2002,7 @@ def on_touch(_char, data: bytearray) -> None:
 
 async def keep_connected() -> None:
     global client
+    last_err = ""
     while True:
         try:
             device = await BleakScanner.find_device_by_name(DEVICE_NAME, timeout=10)
@@ -2021,13 +2024,16 @@ async def keep_connected() -> None:
             screens.resend()
             for msg in fantasy.last:
                 await write_cmd(msg)
-            for msg in (activity_msg, ask_msg):
-                await write_cmd(msg)
+            await write_cmd(activity_msg)
+            await write_cmd(ask_msg, confirm=True)
             await solidworks.resend()
             log_line("helper", "connected to the board")
             await disconnected.wait()
             log_line("helper", "lost the board")
-        except Exception:
+        except Exception as e:
+            if repr(e) != last_err:   # once per new error, so a stuck reconnect shows in the log
+                last_err = repr(e)
+                log_line("helper", f"reconnect failed: {last_err[:150]}")
             await asyncio.sleep(3)
         finally:
             if client is not None:
