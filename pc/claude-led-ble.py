@@ -1769,6 +1769,35 @@ def file_size(path: str) -> int:
         return 0
 
 
+BG_START = re.compile(rb'(?:running in background with ID: |agentId: )([A-Za-z0-9_-]+)')
+BG_END = re.compile(rb'<task-id>([A-Za-z0-9_-]+)</task-id>|"name":\s*"TaskStop",\s*"input":\s*\{"task_id":\s*"([A-Za-z0-9_-]+)"')
+BG_MAX_SECONDS = 3600
+
+
+def background_running(path: str) -> bool:
+    """A background command or agent Claude started is still going: no finish note, not stopped.
+    shortcut: one that died with no note (session closed or compacted) counts for BG_MAX_SECONDS, then is ignored."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(max(0, file_size(path) - 512 * 1024))
+            data = f.read()
+    except OSError:
+        return False
+    ended = {a or b for a, b in BG_END.findall(data)}
+    for line in data.splitlines():
+        for task in BG_START.findall(line):
+            if task in ended:
+                continue
+            t = re.search(rb'"timestamp":\s*"([^"]+)"', line)
+            try:
+                started = datetime.fromisoformat(t.group(1).decode().replace("Z", "+00:00")).timestamp()
+            except (AttributeError, ValueError):
+                continue
+            if time.time() - started < BG_MAX_SECONDS:
+                return True
+    return False
+
+
 def turn_asked(path: str) -> tuple:
     """The question Claude's last turn ended with, if any: the Claude app's next-step box (its
     wrap_up tool) with a question in it, and its reply buttons' labels (not app actions like commit).
@@ -1823,11 +1852,14 @@ async def handle_hook(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
             claude_state = letter[0].encode()
             if path:
                 transcript, transcript_pos = path, file_size(path)
+            # Finished with a question box: flash for ASK_FLASH_SECONDS. Any other hook stops it.
+            asked = claude_state == b"D" and bool(transcript) and (await asyncio.to_thread(turn_asked, transcript))[0]
+            if claude_state == b"D" and not asked and path and await asyncio.to_thread(background_running, path):
+                claude_state = b"W"   # its turn ended waiting on a background task, which wakes it when done
+            if path:
                 running.pop(path, None)
                 if claude_state in (b"W", b"A"):
                     running[path] = [transcript_pos, claude_state]
-            # Finished with a question box: flash for ASK_FLASH_SECONDS. Any other hook stops it.
-            asked = claude_state == b"D" and bool(transcript) and (await asyncio.to_thread(turn_asked, transcript))[0]
             ask_until = time.monotonic() + ASK_FLASH_SECONDS if asked else 0.0
             ok = await refresh()
             # Tell the hook to use USB only when the board missed it; USB sends the raw letter,

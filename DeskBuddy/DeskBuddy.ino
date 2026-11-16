@@ -2000,7 +2000,7 @@ void enterEyes() {
 // while either is on, the sim gives the screens and LED back, and its next frame after takes them again.
 bool simYields() {
   char c = claudeStatus ? claudeStatus : ledState;
-  return mPlaying || c == 'W' || c == 'A' || c == 'Y';
+  return mPlaying || c == 'W' || c == 'A' || c == 'Y' || (ask.title[0] && ask.opt[0][0]);   // a question the buttons answer: until answered
 }
 
 // A driving session: the sim takes both screens and the LED
