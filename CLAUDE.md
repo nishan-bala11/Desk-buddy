@@ -98,7 +98,8 @@ arduino-cli compile --upload -p COMx --fqbn "esp32:esp32:esp32s3:FlashSize=16M,P
   what's on the screen and sent over the shared 40 MHz bus, so PSRAM bandwidth and SPI set the
   frame rate. `flushIfChanged` sends only the rectangle that changed, and `buddy::eye()` in
   `buddy_screens.h` is hand-optimised (pixel-identical, checked against the original). Re-exporting
-  `buddy_screens.h` from the designer brings the slow `eye()` back. Moving eyes went from ~10 fps
+  `buddy_screens.h` from the designer brings the slow `eye()` back. Also a hand edit there: `buddyLogo26` draws
+  nothing for Spotify, so its music pages show the cover without the app logo in the middle (owner's wish, 2026-11-19). Moving eyes went from ~10 fps
   to ~25 fps. The Serial Monitor prints each scene's frame rate when it ends.
   In a scene, each sensor blinks the eye on its own screen, as in the plain eyes: `buddyDrawScene()`
   takes the right screen's `BuddyData` separately (`dRight`, another hand edit in `buddy_screens.h`).

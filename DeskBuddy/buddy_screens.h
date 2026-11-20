@@ -5840,6 +5840,7 @@ static inline void buddyLogo32(Arduino_GFX *g, int x, int y, uint8_t kind, uint1
 // Apps without a logo get a music note in their colour; bg shows through the cut-outs.
 static inline void buddyLogo26(Arduino_GFX *g, int x, int y, uint8_t kind, uint16_t bg) {
   (void)bg;
+  if (kind == buddy::APP_SPOTIFY) return;   // the owner wants no logo over the cover for Spotify (hand edit, keep on re-export)
   switch (kind) {
     case buddy::APP_SPOTIFY:
       g->fillCircle(x, y, 13, 0x1EAC);
