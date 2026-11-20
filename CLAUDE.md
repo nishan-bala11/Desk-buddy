@@ -67,7 +67,7 @@ arduino-cli compile --upload -p COMx --fqbn "esp32:esp32:esp32s3:FlashSize=16M,P
 - Characteristics:
   - CMD `…0002`. Text messages W/A/D/O/Y (LED; Y = flashing green / orange for 30 s after Claude finishes with a question box), N, P, V, X, T, F (fantasy matchup), L (fantasy standings), K (clock), U (Claude status + usage); binary G/S/Q (sim begin/state/quit). A line starting with `>` on the USB serial port is handled like a CMD message, to try screens without the helper.
   - IMG `…0003`
-  - TOUCH `…0004`. Notify, actions `p n + - m`; `m` is the both-sensors mute chord.
+  - TOUCH `…0004`. Notify, actions `p n b + - m`; `b` (previous song) is a double click on the right button, `m` is the both-sensors mute chord.
   - TRACK `…0005`
   - OTA `…0006`. Signed firmware updates. Also on CMD: J (Claude's step), ? (its question), M (SolidWorks). `>@L` / `>@R` on USB dumps a screen's framebuffer, to check a layout without seeing it.
 - Claude Code hooks reach the helper on TCP 47800.
@@ -150,6 +150,9 @@ arduino-cli compile --upload -p COMx --fqbn "esp32:esp32:esp32s3:FlashSize=16M,P
 - **Claude and music come before the racing pages (2026-11-14).** The owner asked for it: `simYields()` hands the
   screens and LED back while Claude is W / A / Y or music is playing (paused doesn't count), and the game's next
   frame after takes them again. Seen on the board with Claude working during a test drive.
+  An open question with reply buttons also counts, until it's answered (2026-11-15): the board's Claude status is
+  `D` by then, so the sim kept the screens and the question only got its 8 s card beside the gauges, with the
+  buttons still on music. Confirmed on the board with the game running.
 - **Forza (2026-10-29).** The helper listens for Forza's Data Out on UDP 127.0.0.1:5300 (`ForzaRelay`)
   and turns each packet into the racing sim's own `G` / `S` messages (`forza_messages`), so the board's
   gauge and shift light work unchanged; frame flag 4 swaps the minimap for a lap / position screen fed
@@ -225,6 +228,9 @@ arduino-cli compile --upload -p COMx --fqbn "esp32:esp32:esp32s3:FlashSize=16M,P
   only while touched, and `AFTER_VOLUME_MS` (1 s) after a volume hold a touch can't tap. The mute chord
   re-arms only after both are off for the same 300 ms. Taps, holds and ignored dropouts are printed
   to the Serial Monitor ("Touch: ...").
+  Because of that window a quick double click arrives as one press that was let go and pressed again
+  (`Touch::clicks`); on the "next" button it sends `b`, previous song (2026-11-19, confirmed on the board).
+  Single clicks keep their timing. A slow double click (over `TAP_MAX_MS` from the first press) becomes a volume hold.
 - **Volume follows the default device.** The helper starts at log-on, but the default output can
   change later (Realtek's jack switches between "Speakers" and "Headphones", a monitor or Bluetooth
   set connects). `Volume` asks Windows for the default playback device before every step or mute and
@@ -273,3 +279,13 @@ arduino-cli compile --upload -p COMx --fqbn "esp32:esp32:esp32s3:FlashSize=16M,P
   - Night mode runs 23:00-06:00, good morning 06:00-08:00 and sleepy eyes 21:00-23:00, each set in the design JSON and in `buddy_screens.h`. Good morning ran to 11:00 in the friend's design; this buddy's owner moved it to 08:00 (2026-10-28), so keep that when taking a newer design or `buddy_screens.h` from the friend.
 
 - Answering Claude from the board (2026-11-14): when the next-step box asks a question with reply buttons, the left screen shows the question and the right shows the first two reply labels. Left button = top, right = bottom. The board sends `1`/`2`, and the helper brings the Claude app to the front (an Alt tap then SetForegroundWindow, since Windows blocks background apps from taking the focus; it types only if Claude really has the focus, otherwise the card stays up for another press) and types the label + Enter. First it opens the chat that asked with `claude://code/continue?session=local_<id>` (the id comes from the app's claude-code-sessions/local_*.json whose cliSessionId matches the transcript; an undocumented link, so an app update could break it). The question is kept even if the board is away, and sent again on reconnect. While it is open, other sessions cannot take the screens. Confirmed working live.
+  The question goes as an acknowledged write (`write_cmd(..., confirm=True)`) and a failure is logged: once
+  (2026-11-15) it never reached the board as a write without response. A new turn in the asking chat clears it,
+  including one started by a background task finishing.
+- Background tasks (2026-11-15): a turn that ends while a background command or agent it started is still running
+  shows as `W`, not `D` (`background_running`: a start with no `<task-id>` finish note and no `TaskStop`; one with
+  neither is ignored after an hour). `pc/test_background.py` checks it. Seen live: the board got `W` for the chat
+  for the whole minute a background task ran.
+- Bluetooth drops: on 2026-11-15 the link dropped about once a minute while the racing sim streamed, and about once
+  in 10 minutes otherwise. Wireless updates failed then; USB worked. Cause not found. A failed reconnect is
+  logged as `[helper] reconnect failed: ...`.
