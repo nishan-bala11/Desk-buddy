@@ -180,6 +180,7 @@ struct Touch {
   uint32_t lastRepeat;
   uint32_t touchedAt;     // last time the sensor read touched; the press ends TOUCH_RELEASE_MS after it
   uint32_t volumeEndAt;   // when the last volume hold ended (0 = none yet)
+  uint8_t clicks;         // presses inside this one: a re-press within TOUCH_RELEASE_MS makes it a double click
 };
 
 struct Msg { uint16_t len; char data[250]; };
@@ -2318,12 +2319,15 @@ void updateMuteChord(uint32_t now) {
 void updateTouch(Touch &t, char tapAction, char holdAction, uint32_t now) {
   const char *side = t.pin == TOUCH_LEFT_PIN ? "left" : "right";
   bool touched = isTouched(t.pin, now);
-  if (touched && !t.wasTouched && t.down)
-    Serial.printf("Touch: %s flickered off for %lu ms (ignored)\n", side, (unsigned long)(now - t.touchedAt));
+  if (touched && !t.wasTouched && t.down) {
+    t.clicks++;
+    Serial.printf("Touch: %s let go for %lu ms (click %d)\n", side, (unsigned long)(now - t.touchedAt), t.clicks);
+  }
   t.wasTouched = touched;
   if (touched) t.touchedAt = now;
   if (touched && !t.down) {
     t.down = true;
+    t.clicks = 1;
     t.downAt = now;
     t.volume = false;
     t.held = bothDown || (t.volumeEndAt && now - t.volumeEndAt < AFTER_VOLUME_MS);
@@ -2341,9 +2345,9 @@ void updateTouch(Touch &t, char tapAction, char holdAction, uint32_t now) {
     if (t.volume) t.volumeEndAt = now;
     uint32_t len = t.touchedAt - t.downAt;
     if (!t.held && len >= TAP_MIN_MS) {
-      Serial.printf("Touch: %s tap (%lu ms)\n", side, (unsigned long)len);
+      Serial.printf("Touch: %s %s (%lu ms)\n", side, t.clicks >= 2 ? "double tap" : "tap", (unsigned long)len);
       if (tapAction == '>' || tapAction == '<') fantasyFlip(tapAction == '>' ? 1 : -1);
-      else sendTouch(tapAction);
+      else sendTouch(tapAction == 'n' && t.clicks >= 2 ? 'b' : tapAction);   // double tap on "next": back a song
     }
   }
 }
